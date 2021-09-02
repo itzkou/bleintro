@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity() {
             val device = result.device
             mDevices[device.address] = device
 
-
+            mDeviceAdapter.updateDevices(mDevices.values.toList())
 
         }
 
@@ -90,7 +90,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         promptEnableBluetooth()
-        Log.i("resumi", mDevices.values.toList().toString())
+
 
     }
 
