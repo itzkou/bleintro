@@ -3,6 +3,7 @@ package com.example.bleintro
 import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
@@ -10,20 +11,17 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.LocationManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.bleintro.databinding.ActivityMainBinding
 import com.google.android.material.snackbar.Snackbar
-
 
 
 class MainActivity : AppCompatActivity() {
@@ -33,7 +31,7 @@ class MainActivity : AppCompatActivity() {
             if (isGranted) {
                 startBleScan()
             } else {
-                Toast.makeText(this, "Location denied...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Location permission denied...", Toast.LENGTH_SHORT).show()
             }
         }
     private val enableBluetooth =
@@ -45,11 +43,16 @@ class MainActivity : AppCompatActivity() {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothManager.adapter
     }
-   /* private val isGpsEnabled: Boolean by lazy {
+
+    /*private val isGpsEnabled: Boolean by lazy {
         val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         locationManager.isLocationEnabled
 
     }*/
+
+
+    private val mDevices = LinkedHashMap<String, BluetoothDevice>()
+    private val mDeviceAdapter = DeviceAdapter()
     private val bleScanner by lazy {
         bluetoothAdapter.bluetoothLeScanner
     }
@@ -58,13 +61,18 @@ class MainActivity : AppCompatActivity() {
         .build()
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            with(result.device) {
-                Log.i(
-                    "“ScanCallback”",
-                    "Found BLE device! Name: ${name ?: "Unnamed"}, address: $address"
-                )
-            }
+            val device = result.device
+            mDevices[device.address] = device
+
+
+
         }
+
+        override fun onScanFailed(errorCode: Int) {
+            Log.e("ScanCallback", "onScanFailed: code $errorCode")
+        }
+
+
     }
 
 
@@ -73,6 +81,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         val view = binding.root
         setContentView(view)
+        setupUi()
 
 
     }
@@ -81,12 +90,9 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         promptEnableBluetooth()
-        //promptEnableGps()
-        setupUi()
+        Log.i("resumi", mDevices.values.toList().toString())
 
     }
-
-
 
 
     private fun promptEnableBluetooth() {
@@ -94,51 +100,57 @@ class MainActivity : AppCompatActivity() {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
             enableBluetooth.launch(enableBtIntent)
         }
+
     }
 
-   /* private fun promptEnableGps() {
-        if (!isGpsEnabled)
-            Toast.makeText(this, "Please enable location", Toast.LENGTH_SHORT).show()
-
-    }*/
 
     private fun setupUi() {
         /** checking permissions **/
         binding.btnScan.setOnClickListener {
             checkLocationPermission()
         }
+        binding.stop.setOnClickListener {
+            stopBleScan()
+        }
+
+        binding.rvDevices.apply {
+            layoutManager =
+                LinearLayoutManager(this@MainActivity, LinearLayoutManager.VERTICAL, false)
+            adapter = mDeviceAdapter
+
+        }
+
     }
 
     private fun checkLocationPermission() {
         //todo add android sdk < M permissions and handle multiple permissions ( add location )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            when {
-                ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) == PackageManager.PERMISSION_GRANTED -> {
-                    // You can use the permission.
-                    startBleScan()
-                }
-                shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION) -> {
-                    // explain why this permission is needed using UI
-                    Snackbar.make(
-                        this,
-                        binding.root,
-                        "We need permissions  in order to make your app work",
-                        Snackbar.LENGTH_SHORT
-                    ).setAction("Settings") {
-                        goToSettings()
-                    }.show()
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                // You can use the permission.
+                startBleScan()
 
-                }
-                else -> {
-                    // directly ask for the permission.
-                    // The registered ActivityResultCallback gets the result of this request.
-                    permissionLauncher.launch(
-                        Manifest.permission.ACCESS_FINE_LOCATION
-                    )
-                }
+            }
+            shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION) -> {
+                // explain why this permission is needed using UI
+                Snackbar.make(
+                    this,
+                    binding.root,
+                    "Allow location and turn it on in order to use our services",
+                    Snackbar.LENGTH_SHORT
+                ).setAction("Settings") {
+                    goToSettings()
+                }.show()
+
+            }
+            else -> {
+                // directly ask for the permission.
+                // The registered ActivityResultCallback gets the result of this request.
+                permissionLauncher.launch(
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                )
             }
         }
 
@@ -146,12 +158,14 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun startBleScan() {
+        //mDeviceAdapter.updateDevices(listOf())
         bleScanner.startScan(null, scanSettings, scanCallback)
-     }
+        Toast.makeText(this, "Scanning ...", Toast.LENGTH_SHORT).show()
+    }
 
     private fun stopBleScan() {
         bleScanner.stopScan(scanCallback)
-     }
+    }
 
     private fun goToSettings() {
         val myAppSettings = Intent(
