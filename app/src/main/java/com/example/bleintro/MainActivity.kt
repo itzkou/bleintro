@@ -2,16 +2,13 @@ package com.example.bleintro
 
 import android.Manifest
 import android.app.Activity
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
+import android.bluetooth.*
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -20,9 +17,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.example.bleintro.databinding.ActivityMainBinding
 import com.google.android.material.snackbar.Snackbar
 
@@ -44,6 +39,7 @@ class MainActivity : AppCompatActivity() {
             if (activityResult.resultCode != Activity.RESULT_OK)
                 promptEnableBluetooth()
         }
+
     /** Bluetooth components **/
     private val bluetoothAdapter: BluetoothAdapter by lazy {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -52,9 +48,11 @@ class MainActivity : AppCompatActivity() {
     private val bleScanner by lazy {
         bluetoothAdapter.bluetoothLeScanner
     }
+
     /** Devices **/
     private val mDevices = LinkedHashMap<String, BluetoothDevice>()
     private val mDeviceAdapter = DeviceAdapter()
+
     /** Scan  **/
     private val scanSettings = ScanSettings.Builder()
         .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -63,8 +61,10 @@ class MainActivity : AppCompatActivity() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
             mDevices[device.address] = device
-
             mDeviceAdapter.updateDevices(mDevices.values.toList())
+            with( device) {
+                connectGatt(this@MainActivity, false, gattCallback)
+            }
 
         }
 
@@ -74,12 +74,19 @@ class MainActivity : AppCompatActivity() {
 
 
     }
-    /* private val isGpsEnabled: Boolean by lazy {
-         val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-         locationManager.isLocationEnabled
 
-     }*/
-
+    /** Gatt Callbacks **/
+    private val gattCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
+            gatt?.device?.let { bluetoothDevice ->
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    Toast.makeText(this@MainActivity, "Gatt_sucess", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@MainActivity, "Gatt_faillure", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -122,6 +129,9 @@ class MainActivity : AppCompatActivity() {
             layoutManager =
                 LinearLayoutManager(this@MainActivity, LinearLayoutManager.VERTICAL, false)
             adapter = mDeviceAdapter
+
+        }
+        mDeviceAdapter.selectDevice {
 
         }
 

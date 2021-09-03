@@ -10,6 +10,8 @@ import com.example.bleintro.databinding.ItemDeviceBinding
 class DeviceAdapter() : RecyclerView.Adapter<DeviceAdapter.ScanViewHolder>() {
 
     private var devices = listOf<BluetoothDevice>()
+    private var deviceItemClicklistener: ((String) -> Unit)? = null
+
 
     class ScanViewHolder(val binding: ItemDeviceBinding) : RecyclerView.ViewHolder(binding.root)
 
@@ -28,6 +30,11 @@ class DeviceAdapter() : RecyclerView.Adapter<DeviceAdapter.ScanViewHolder>() {
         with(holder.binding) {
             txAdress.text = device.address
             txName.text = device.name
+            root.setOnClickListener {
+                deviceItemClicklistener?.let { callback ->
+                    callback(device.address)
+                }
+            }
         }
     }
 
@@ -38,15 +45,14 @@ class DeviceAdapter() : RecyclerView.Adapter<DeviceAdapter.ScanViewHolder>() {
 
     fun updateDevices(newDevices: List<BluetoothDevice>) {
         val diffResult =
-            DiffUtil.calculateDiff(SimpleCallback(this.devices, newDevices) { it.address})
+            DiffUtil.calculateDiff(SimpleCallback(this.devices, newDevices) { it.address })
         this.devices = newDevices
         diffResult.dispatchUpdatesTo(this)
     }
 
-    /*fun add(chatMsg: BluetoothDevice) {
-        devices.add(chatMsg)
-        notifyItemInserted(devices.size)
-    }*/
+    fun selectDevice(callback: ((String) -> Unit)) {
+        this.deviceItemClicklistener = callback
+    }
 
 
 }
