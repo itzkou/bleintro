@@ -11,6 +11,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -19,13 +20,17 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.example.bleintro.databinding.ActivityMainBinding
 import com.google.android.material.snackbar.Snackbar
 
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
+
+    /** ActivityContracts **/
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
@@ -39,23 +44,18 @@ class MainActivity : AppCompatActivity() {
             if (activityResult.resultCode != Activity.RESULT_OK)
                 promptEnableBluetooth()
         }
+    /** Bluetooth components **/
     private val bluetoothAdapter: BluetoothAdapter by lazy {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothManager.adapter
     }
-
-    /*private val isGpsEnabled: Boolean by lazy {
-        val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        locationManager.isLocationEnabled
-
-    }*/
-
-
-    private val mDevices = LinkedHashMap<String, BluetoothDevice>()
-    private val mDeviceAdapter = DeviceAdapter()
     private val bleScanner by lazy {
         bluetoothAdapter.bluetoothLeScanner
     }
+    /** Devices **/
+    private val mDevices = LinkedHashMap<String, BluetoothDevice>()
+    private val mDeviceAdapter = DeviceAdapter()
+    /** Scan  **/
     private val scanSettings = ScanSettings.Builder()
         .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
         .build()
@@ -74,6 +74,11 @@ class MainActivity : AppCompatActivity() {
 
 
     }
+    /* private val isGpsEnabled: Boolean by lazy {
+         val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+         locationManager.isLocationEnabled
+
+     }*/
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -123,7 +128,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkLocationPermission() {
-        //todo add android sdk < M permissions and handle multiple permissions ( add location )
+        // android sdk < M permissions doesn't support rationale
         when {
             ContextCompat.checkSelfPermission(
                 this,
@@ -158,9 +163,9 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun startBleScan() {
-        //mDeviceAdapter.updateDevices(listOf())
         bleScanner.startScan(null, scanSettings, scanCallback)
-        Toast.makeText(this, "Scanning ...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Make sure you turn on location services ...", Toast.LENGTH_SHORT)
+            .show()
     }
 
     private fun stopBleScan() {
