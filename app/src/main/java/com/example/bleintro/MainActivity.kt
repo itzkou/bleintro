@@ -62,9 +62,9 @@ class MainActivity : AppCompatActivity() {
             val device = result.device
             mDevices[device.address] = device
             mDeviceAdapter.updateDevices(mDevices.values.toList())
-            with( device) {
-                connectGatt(this@MainActivity, false, gattCallback)
-            }
+
+            if (mDevices.size > 10)
+                stopBleScan()
 
         }
 
@@ -78,12 +78,52 @@ class MainActivity : AppCompatActivity() {
     /** Gatt Callbacks **/
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
-            gatt?.device?.let { bluetoothDevice ->
-                if (status == BluetoothGatt.GATT_SUCCESS) {
-                    Toast.makeText(this@MainActivity, "Gatt_sucess", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this@MainActivity, "Gatt_faillure", Toast.LENGTH_SHORT).show()
+            gatt?.device?.let { btDevice ->
+
+                when (status) {
+                    BluetoothGatt.GATT_SUCCESS -> {
+                        when (newState) {
+                            BluetoothProfile.STATE_CONNECTED -> {
+                                Log.w(
+                                    "BluetoothGattCallback",
+                                    "Successfully connected to ${btDevice.address}"
+                                )
+
+                            }
+                            BluetoothProfile.STATE_DISCONNECTED -> {
+                                Log.w(
+                                    "BluetoothGattCallback",
+                                    "Successfully disconnected from ${btDevice.address}"
+                                )
+                                gatt.close()
+                            }
+                            else -> Log.i(
+                                "BluetoothProfile",
+                                " BluetoothProfile new state last else branch"
+                            )
+                        }
+                    }
+                    BluetoothGatt.GATT_FAILURE -> {
+                        gatt.close()
+                        Log.e(
+                            "onConnectionStateChange",
+                            "Error $status encountered for ${btDevice.address}! Disconnecting..."
+                        )
+                    }
+                    else -> {
+                        Log.i(
+                            "onConnectionStateChange",
+                            "you can implement other status code here"
+                        )
+                    }
                 }
+                /* if (status == BluetoothGatt.GATT_SUCCESS) {
+
+
+                 } else {
+                     Toast.makeText(this@MainActivity, "Gatt_faillure", Toast.LENGTH_SHORT).show()
+                     gatt.close()
+                 }*/
             }
         }
     }
@@ -131,8 +171,8 @@ class MainActivity : AppCompatActivity() {
             adapter = mDeviceAdapter
 
         }
-        mDeviceAdapter.selectDevice {
-
+        mDeviceAdapter.selectDevice { macAddress ->
+            mDevices[macAddress]!!.connectGatt(this, false, gattCallback)
         }
 
     }
