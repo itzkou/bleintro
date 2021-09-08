@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -20,10 +21,16 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.bleintro.databinding.ActivityMainBinding
 import com.google.android.material.snackbar.Snackbar
+import java.util.*
+import kotlin.collections.LinkedHashMap
 
+private const val GATT_MAX_MTU_SIZE = 517
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
+
+    private val batteryServiceUuid = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
+
 
     /** ActivityContracts **/
     private val permissionLauncher =
@@ -52,6 +59,7 @@ class MainActivity : AppCompatActivity() {
     /** Devices **/
     private val mDevices = LinkedHashMap<String, BluetoothDevice>()
     private val mDeviceAdapter = DeviceAdapter()
+    private var mBluetoothGatt: BluetoothGatt? = null
 
     /** Scan  **/
     private val scanSettings = ScanSettings.Builder()
@@ -63,8 +71,8 @@ class MainActivity : AppCompatActivity() {
             mDevices[device.address] = device
             mDeviceAdapter.updateDevices(mDevices.values.toList())
 
-            if (mDevices.size > 10)
-                stopBleScan()
+            /* if (mDevices.size > 20)
+                 stopBleScan()*/
 
         }
 
@@ -84,11 +92,20 @@ class MainActivity : AppCompatActivity() {
                     BluetoothGatt.GATT_SUCCESS -> {
                         when (newState) {
                             BluetoothProfile.STATE_CONNECTED -> {
+                                mBluetoothGatt = gatt
+
+                                /***  we highly recommend calling discoverServices() from the main/UI thread to prevent a rare threading
+                                 * issue from causing a deadlock situation where the app can be left waiting for the onServicesDiscovered()
+                                 * callback that somehow got dropped. ***/
+                                runOnUiThread {
+                                    mBluetoothGatt?.discoverServices()
+                                }
                                 Log.w(
                                     "BluetoothGattCallback",
                                     "Successfully connected to ${btDevice.address}"
                                 )
-
+                                //stopBleScan()
+                                mBluetoothGatt?.requestMtu(GATT_MAX_MTU_SIZE)
                             }
                             BluetoothProfile.STATE_DISCONNECTED -> {
                                 Log.w(
@@ -99,12 +116,13 @@ class MainActivity : AppCompatActivity() {
                             }
                             else -> Log.i(
                                 "BluetoothProfile",
-                                " BluetoothProfile new state last else branch"
+                                " This else concerns the rest of states"
                             )
                         }
                     }
                     BluetoothGatt.GATT_FAILURE -> {
                         gatt.close()
+
                         Log.e(
                             "onConnectionStateChange",
                             "Error $status encountered for ${btDevice.address}! Disconnecting..."
@@ -117,14 +135,26 @@ class MainActivity : AppCompatActivity() {
                         )
                     }
                 }
-                /* if (status == BluetoothGatt.GATT_SUCCESS) {
 
-
-                 } else {
-                     Toast.makeText(this@MainActivity, "Gatt_faillure", Toast.LENGTH_SHORT).show()
-                     gatt.close()
-                 }*/
             }
+        }
+
+        override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+            super.onServicesDiscovered(gatt, status)
+            gatt?.let {
+                Log.w(
+                    "BluetoothGattCallback",
+                    "Discovered ${it.services.size} services for ${it.device.address}"
+                )
+                it.printGattTable() // See implementation just above this section
+            }
+        }
+
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            Log.w(
+                "onMtuChanged",
+                "ATT MTU changed to $mtu, success: ${status == BluetoothGatt.GATT_SUCCESS}"
+            )
         }
     }
 
@@ -214,12 +244,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun startBleScan() {
         bleScanner.startScan(null, scanSettings, scanCallback)
-        Toast.makeText(this, "Make sure you turn on location services ...", Toast.LENGTH_SHORT)
+        Toast.makeText(this, "Make sure your location services are on...", Toast.LENGTH_SHORT)
             .show()
     }
 
     private fun stopBleScan() {
         bleScanner.stopScan(scanCallback)
+        Log.w("stopBleScan", "stopBleScan")
     }
 
     private fun goToSettings() {
@@ -229,5 +260,25 @@ class MainActivity : AppCompatActivity() {
         myAppSettings.addCategory(Intent.CATEGORY_DEFAULT)
         myAppSettings.flags = Intent.FLAG_ACTIVITY_NEW_TASK
         startActivity(myAppSettings)
+    }
+
+    private fun BluetoothGatt.printGattTable() {
+        if (services.isEmpty()) {
+            Log.i(
+                "printGattTable",
+                "No service and characteristic available, call discoverServices() first?"
+            )
+            return
+        }
+        services.forEach { service ->
+            val characteristicsTable = service.characteristics.joinToString(
+                separator = "\n|--",
+                prefix = "|--"
+            ) { it.uuid.toString() }
+            Log.i(
+                "printGattTable",
+                "\nService ${service.uuid}\nCharacteristics:\n$characteristicsTable"
+            )
+        }
     }
 }
