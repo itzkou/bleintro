@@ -72,6 +72,7 @@ class MainActivity : AppCompatActivity() {
                 it.name != null
             }
             mDeviceAdapter.updateDevices(namedDevices)
+            //todo check when to use stopBleScan
 
 
         }
