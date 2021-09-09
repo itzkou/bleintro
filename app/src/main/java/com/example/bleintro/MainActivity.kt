@@ -11,7 +11,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -69,10 +68,11 @@ class MainActivity : AppCompatActivity() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
             mDevices[device.address] = device
-            mDeviceAdapter.updateDevices(mDevices.values.toList())
+            val namedDevices = mDevices.values.toList().filter {
+                it.name != null
+            }
+            mDeviceAdapter.updateDevices(namedDevices)
 
-            /* if (mDevices.size > 20)
-                 stopBleScan()*/
 
         }
 
@@ -98,14 +98,20 @@ class MainActivity : AppCompatActivity() {
                                  * issue from causing a deadlock situation where the app can be left waiting for the onServicesDiscovered()
                                  * callback that somehow got dropped. ***/
                                 runOnUiThread {
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "Discovering services",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                     mBluetoothGatt?.discoverServices()
                                 }
                                 Log.w(
                                     "BluetoothGattCallback",
                                     "Successfully connected to ${btDevice.address}"
                                 )
-                                //stopBleScan()
                                 mBluetoothGatt?.requestMtu(GATT_MAX_MTU_SIZE)
+                                stopBleScan()
+
                             }
                             BluetoothProfile.STATE_DISCONNECTED -> {
                                 Log.w(
@@ -243,6 +249,7 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun startBleScan() {
+        mDevices.clear()
         bleScanner.startScan(null, scanSettings, scanCallback)
         Toast.makeText(this, "Make sure your location services are on...", Toast.LENGTH_SHORT)
             .show()
