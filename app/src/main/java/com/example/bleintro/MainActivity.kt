@@ -11,8 +11,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -74,7 +72,6 @@ class MainActivity : AppCompatActivity() {
                 it.name != null
             }
             mDeviceAdapter.updateDevices(namedDevices)
-
 
 
         }
@@ -149,13 +146,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-            super.onServicesDiscovered(gatt, status)
-            gatt?.let {
+            mBluetoothGatt?.let {
                 Log.w(
                     "BluetoothGattCallback",
                     "Discovered ${it.services.size} services for ${it.device.address}"
                 )
                 it.printGattTable() // See implementation just above this section
+                readBatteryLevel()
             }
         }
 
@@ -164,6 +161,38 @@ class MainActivity : AppCompatActivity() {
                 "onMtuChanged",
                 "ATT MTU changed to $mtu, success: ${status == BluetoothGatt.GATT_SUCCESS}"
             )
+        }
+
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+            characteristic?.let {
+                when (status) {
+                    BluetoothGatt.GATT_SUCCESS -> {
+                        val readBytes: ByteArray = it.value
+                        val batteryLevel = readBytes.first().toInt()
+                        Log.i(
+                            "BluetoothGattCallback",
+                            "Read characteristic HEX ${it.uuid} :${it.value.toHexString()}"
+                        )
+                        Log.i(
+                            "BluetoothGattCallback",
+                            "Read characteristic DEC ${it.uuid} :$batteryLevel"
+                        )
+                    }
+                    BluetoothGatt.GATT_READ_NOT_PERMITTED -> {
+                        Log.e("BluetoothGattCallback", "Read not permitted for ${it.uuid}!")
+                    }
+                    else -> {
+                        Log.e(
+                            "BluetoothGattCallback",
+                            "Characteristic read failed for ${it.uuid}, error: $status"
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -296,9 +325,9 @@ class MainActivity : AppCompatActivity() {
     private fun readBatteryLevel() {
         val batteryServiceUuid = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
         val batteryLevelCharUuid = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
-        val batteryLevelChar = mBluetoothGatt!!
+        val batteryLevelChar: BluetoothGattCharacteristic? = mBluetoothGatt!!
             .getService(batteryServiceUuid)?.getCharacteristic(batteryLevelCharUuid)
-        if (batteryLevelChar?.isReadable() == true) {
+        if (batteryLevelChar?.isReadable() == true) {    //batteryLevelChar is an optional, we use == true to both check for the fact that it is nonnull and that it is indeed a readable characteristic.
             mBluetoothGatt!!.readCharacteristic(batteryLevelChar)
         }
     }
@@ -307,7 +336,7 @@ class MainActivity : AppCompatActivity() {
         containsProperty(BluetoothGattCharacteristic.PROPERTY_READ)
 
     fun BluetoothGattCharacteristic.isWritable(): Boolean =
-    containsProperty(BluetoothGattCharacteristic.PROPERTY_WRITE)
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_WRITE)
 
     fun BluetoothGattCharacteristic.isWritableWithoutResponse(): Boolean =
         containsProperty(BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)
@@ -315,4 +344,7 @@ class MainActivity : AppCompatActivity() {
     fun BluetoothGattCharacteristic.containsProperty(property: Int): Boolean {
         return properties and property != 0
     }
+
+    fun ByteArray.toHexString(): String =
+        joinToString(separator = " ", prefix = "0x") { String.format("%02X", it) }
 }
