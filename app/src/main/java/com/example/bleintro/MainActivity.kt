@@ -11,6 +11,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -72,7 +74,7 @@ class MainActivity : AppCompatActivity() {
                 it.name != null
             }
             mDeviceAdapter.updateDevices(namedDevices)
-            //todo check when to use stopBleScan
+
 
 
         }
@@ -99,19 +101,18 @@ class MainActivity : AppCompatActivity() {
                                  * issue from causing a deadlock situation where the app can be left waiting for the onServicesDiscovered()
                                  * callback that somehow got dropped. ***/
                                 runOnUiThread {
-                                    Toast.makeText(
-                                        this@MainActivity,
-                                        "Discovering services",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
                                     mBluetoothGatt?.discoverServices()
+                                    Log.w(
+                                        "BluetoothProfileConnected",
+                                        "Successfully connected to ${btDevice.address}"
+                                    )
                                 }
                                 Log.w(
                                     "BluetoothGattCallback",
                                     "Successfully connected to ${btDevice.address}"
                                 )
                                 mBluetoothGatt?.requestMtu(GATT_MAX_MTU_SIZE)
-                                stopBleScan()
+
 
                             }
                             BluetoothProfile.STATE_DISCONNECTED -> {
@@ -126,6 +127,7 @@ class MainActivity : AppCompatActivity() {
                                 " This else concerns the rest of states"
                             )
                         }
+                        //stopBleScan()
                     }
                     BluetoothGatt.GATT_FAILURE -> {
                         gatt.close()
@@ -138,7 +140,7 @@ class MainActivity : AppCompatActivity() {
                     else -> {
                         Log.i(
                             "onConnectionStateChange",
-                            "you can implement other status code here"
+                            " Error 133 shows up here"
                         )
                     }
                 }
@@ -210,6 +212,7 @@ class MainActivity : AppCompatActivity() {
         }
         mDeviceAdapter.selectDevice { macAddress ->
             mDevices[macAddress]!!.connectGatt(this, false, gattCallback)
+            stopBleScan()
         }
 
     }
@@ -288,5 +291,28 @@ class MainActivity : AppCompatActivity() {
                 "\nService ${service.uuid}\nCharacteristics:\n$characteristicsTable"
             )
         }
+    }
+
+    private fun readBatteryLevel() {
+        val batteryServiceUuid = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
+        val batteryLevelCharUuid = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
+        val batteryLevelChar = mBluetoothGatt!!
+            .getService(batteryServiceUuid)?.getCharacteristic(batteryLevelCharUuid)
+        if (batteryLevelChar?.isReadable() == true) {
+            mBluetoothGatt!!.readCharacteristic(batteryLevelChar)
+        }
+    }
+
+    fun BluetoothGattCharacteristic.isReadable(): Boolean =
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_READ)
+
+    fun BluetoothGattCharacteristic.isWritable(): Boolean =
+    containsProperty(BluetoothGattCharacteristic.PROPERTY_WRITE)
+
+    fun BluetoothGattCharacteristic.isWritableWithoutResponse(): Boolean =
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)
+
+    fun BluetoothGattCharacteristic.containsProperty(property: Int): Boolean {
+        return properties and property != 0
     }
 }
