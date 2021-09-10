@@ -90,6 +90,7 @@ class MainActivity : AppCompatActivity() {
 
                 when (status) {
                     BluetoothGatt.GATT_SUCCESS -> {
+
                         when (newState) {
                             BluetoothProfile.STATE_CONNECTED -> {
                                 mBluetoothGatt = gatt
@@ -189,6 +190,35 @@ class MainActivity : AppCompatActivity() {
                         Log.e(
                             "BluetoothGattCallback",
                             "Characteristic read failed for ${it.uuid}, error: $status"
+                        )
+                    }
+                }
+            }
+        }
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+            characteristic?.let {
+                when (status) {
+                    BluetoothGatt.GATT_SUCCESS -> {
+                        Log.i(
+                            "BluetoothGattCallback",
+                            "Wrote to characteristic ${it.uuid} | value: ${it.value.toHexString()}"
+                        )
+                    }
+                    BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH -> {
+                        Log.e("BluetoothGattCallback", "Write exceeded connection ATT MTU!")
+                    }
+                    BluetoothGatt.GATT_WRITE_NOT_PERMITTED -> {
+                        Log.e("BluetoothGattCallback", "Write not permitted for ${it.uuid}!")
+                    }
+                    else -> {
+                        Log.e(
+                            "BluetoothGattCallback",
+                            "Characteristic write failed for ${it.uuid}, error: $status"
                         )
                     }
                 }
@@ -330,6 +360,22 @@ class MainActivity : AppCompatActivity() {
         if (batteryLevelChar?.isReadable() == true) {    //batteryLevelChar is an optional, we use == true to both check for the fact that it is nonnull and that it is indeed a readable characteristic.
             mBluetoothGatt!!.readCharacteristic(batteryLevelChar)
         }
+    }
+
+    fun writeCharacteristic(characteristic: BluetoothGattCharacteristic, payload: ByteArray) {
+        val writeType = when {
+            characteristic.isWritable() -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            characteristic.isWritableWithoutResponse() -> {
+                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            }
+            else -> error("Characteristic ${characteristic.uuid} cannot be written to")
+        }
+
+        mBluetoothGatt?.let { gatt ->
+            characteristic.writeType = writeType
+            characteristic.value = payload
+            gatt.writeCharacteristic(characteristic)
+        } ?: error("Not connected to a BLE device!")
     }
 
     fun BluetoothGattCharacteristic.isReadable(): Boolean =
