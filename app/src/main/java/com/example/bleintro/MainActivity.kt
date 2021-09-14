@@ -30,6 +30,8 @@ class MainActivity : AppCompatActivity() {
 
     private val batteryServiceUuid = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
 
+    private val CCC_Heartrate_Descriptor = "00002902-0000-1000-8000-00805f9b34fb"
+
 
     /** ActivityContracts **/
     private val permissionLauncher =
@@ -153,7 +155,11 @@ class MainActivity : AppCompatActivity() {
                     "Discovered ${it.services.size} services for ${it.device.address}"
                 )
                 it.printGattTable() // See implementation just above this section
-                readBatteryLevel()
+                //readBatteryLevel()
+                //writeHeartControlPoint()
+                //enableHeartRateMeasurementNotifications()
+                //disableHeartRateMeasurementNotifications()
+
             }
         }
 
@@ -362,6 +368,45 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun writeHeartControlPoint() {
+        val heartServiceUuid = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
+        val controlPointCharUuid = UUID.fromString("00002a39-0000-1000-8000-00805f9b34fb")
+        val controlPointChar = mBluetoothGatt!!
+            .getService(heartServiceUuid)?.getCharacteristic(controlPointCharUuid)
+        controlPointChar?.let {
+            val byteArray = byteArrayOf(0x1)
+            writeCharacteristic(it, byteArray)
+        }
+
+    }
+
+    private fun enableHeartRateMeasurementNotifications() {
+        val heartServiceUuid = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
+        val heartRateMeasurementUuid = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
+        val heartRateMeasurementChar =
+            mBluetoothGatt!!.getService(heartServiceUuid)
+                ?.getCharacteristic(heartRateMeasurementUuid)
+
+        heartRateMeasurementChar?.let {
+            enableNotifications(it)
+
+        }
+
+    }
+    private fun disableHeartRateMeasurementNotifications() {
+        val heartServiceUuid = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
+        val heartRateMeasurementUuid = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
+        val heartRateMeasurementChar =
+            mBluetoothGatt!!.getService(heartServiceUuid)
+                ?.getCharacteristic(heartRateMeasurementUuid)
+
+        heartRateMeasurementChar?.let {
+           disableNotifications(it)
+
+        }
+
+    }
+
     fun writeCharacteristic(characteristic: BluetoothGattCharacteristic, payload: ByteArray) {
         val writeType = when {
             characteristic.isWritable() -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
@@ -370,7 +415,7 @@ class MainActivity : AppCompatActivity() {
             }
             else -> error("Characteristic ${characteristic.uuid} cannot be written to")
         }
-
+        Log.i("writotypo", writeType.toString())
         mBluetoothGatt?.let { gatt ->
             characteristic.writeType = writeType
             characteristic.value = payload
@@ -386,6 +431,73 @@ class MainActivity : AppCompatActivity() {
 
     fun BluetoothGattCharacteristic.isWritableWithoutResponse(): Boolean =
         containsProperty(BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)
+
+    fun BluetoothGattCharacteristic.isIndicatable(): Boolean =
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_INDICATE)
+
+    fun BluetoothGattCharacteristic.isNotifiable(): Boolean =
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_NOTIFY)
+
+    fun enableNotifications(characteristic: BluetoothGattCharacteristic) {
+        val cccdUuid = UUID.fromString(CCC_Heartrate_Descriptor)
+        val payload = when {
+            characteristic.isIndicatable() -> BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+            characteristic.isNotifiable() -> BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            else -> {
+                Log.e(
+                    "ConnectionManager",
+                    "${characteristic.uuid} doesn't support notifications/indications"
+                )
+                return
+            }
+        }
+
+        characteristic.getDescriptor(cccdUuid)?.let { cccDescriptor ->
+            if (mBluetoothGatt?.setCharacteristicNotification(characteristic, true) == false) {
+                Log.e(
+                    "ConnectionManager",
+                    "setCharacteristicNotification failed for ${characteristic.uuid}"
+                )
+                return
+            }
+            writeDescriptor(cccDescriptor, payload)
+        } ?: Log.e(
+            "ConnectionManager",
+            "${characteristic.uuid} doesn't contain the CCC descriptor!"
+        )
+    }
+
+    fun disableNotifications(characteristic: BluetoothGattCharacteristic) {
+        if (!characteristic.isNotifiable() && !characteristic.isIndicatable()) {
+            Log.e(
+                "ConnectionManager",
+                "${characteristic.uuid} doesn't support indications/notifications"
+            )
+            return
+        }
+
+        val cccdUuid = UUID.fromString(CCC_Heartrate_Descriptor)
+        characteristic.getDescriptor(cccdUuid)?.let { cccDescriptor ->
+            if (mBluetoothGatt?.setCharacteristicNotification(characteristic, false) == false) {
+                Log.e(
+                    "ConnectionManager",
+                    "setCharacteristicNotification failed for ${characteristic.uuid}"
+                )
+                return
+            }
+            writeDescriptor(cccDescriptor, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
+        } ?: Log.e(
+            "ConnectionManager",
+            "${characteristic.uuid} doesn't contain the CCC descriptor!"
+        )
+    }
+
+    fun writeDescriptor(descriptor: BluetoothGattDescriptor, payload: ByteArray) {
+        mBluetoothGatt?.let { gatt ->
+            descriptor.value = payload
+            gatt.writeDescriptor(descriptor)
+        } ?: error("Not connected to a BLE device!")
+    }
 
     fun BluetoothGattCharacteristic.containsProperty(property: Int): Boolean {
         return properties and property != 0
